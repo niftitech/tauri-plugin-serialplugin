@@ -6,24 +6,52 @@ enum class DataBits(val value: Int) {
     FIVE(5),
     SIX(6),
     SEVEN(7),
-    EIGHT(8)
+    EIGHT(8);
+    
+    companion object {
+        fun fromValue(value: Int): DataBits {
+            return values().find { it.value == value } ?: EIGHT
+        }
+    }
 }
 
 enum class FlowControl {
     NONE,
     SOFTWARE,
-    HARDWARE
+    HARDWARE;
+    
+    companion object {
+        fun fromValue(value: Int): FlowControl {
+            return when (value) {
+                1 -> SOFTWARE
+                2 -> HARDWARE
+                else -> NONE
+            }
+        }
+    }
 }
 
 enum class Parity(val value: Int) {
     NONE(UsbSerialPort.PARITY_NONE),
     ODD(UsbSerialPort.PARITY_ODD),
-    EVEN(UsbSerialPort.PARITY_EVEN)
+    EVEN(UsbSerialPort.PARITY_EVEN);
+    
+    companion object {
+        fun fromValue(value: Int): Parity {
+            return values().find { it.value == value } ?: NONE
+        }
+    }
 }
 
 enum class StopBits(val value: Int) {
     ONE(UsbSerialPort.STOPBITS_1),
-    TWO(UsbSerialPort.STOPBITS_2)
+    TWO(UsbSerialPort.STOPBITS_2);
+    
+    companion object {
+        fun fromValue(value: Int): StopBits {
+            return values().find { it.value == value } ?: ONE
+        }
+    }
 }
 
 enum class ClearBuffer {
