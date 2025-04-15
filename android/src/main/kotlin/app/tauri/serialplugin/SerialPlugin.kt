@@ -54,9 +54,9 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun availablePorts(invoke: Invoke) {
         try {
-            Log.d("SerialPortManager", "Fetching available ports")
+            Log.d("SerialPlugin", "Fetching available ports")
             val ports = serialPortManager.getAvailablePorts()
-            Log.d("SerialPortManager", "Available ports fetched successfully")
+            Log.d("SerialPlugin", "Available ports fetched successfully")
 
             val result = JSObject()
             val portsObject = JSObject()
@@ -75,10 +75,10 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
 
             result.put("ports", portsObject)
 
-            Log.d("SerialPortManager", "Resolving invoke with result: $result")
+            Log.d("SerialPlugin", "Resolving invoke with result: $result")
             invoke.resolve(result)
         } catch (e: Exception) {
-            Log.e("SerialPortManager", "Failed to list ports: ${e.message}", e)
+            Log.e("SerialPlugin", "Failed to list ports: ${e.message}", e)
             invoke.reject("Failed to list ports: ${e.message}")
         }
     }
@@ -100,13 +100,14 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     fun open(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(PortConfigArgs::class.java)
+            // TODO: Remoce hardcoded values
             val serialConfig = SerialPortConfig(
                 path = args.path,
                 baudRate = args.baudRate,
-                dataBits = args.dataBits?.let { DataBits.valueOf(it) } ?: DataBits.EIGHT,
-                flowControl = args.flowControl?.let { FlowControl.valueOf(it) } ?: FlowControl.NONE,
-                parity = args.parity?.let { Parity.valueOf(it) } ?: Parity.NONE,
-                stopBits = args.stopBits?.let { StopBits.valueOf(it) } ?: StopBits.ONE,
+                dataBits = DataBits.EIGHT,
+                flowControl = FlowControl.NONE,
+                parity = Parity.NONE,
+                stopBits = StopBits.ONE,
                 timeout = args.timeout
             )
 
@@ -208,20 +209,34 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     fun startListening(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(CloseArgs::class.java)
+            val formattedPath = args.path.replace(".", "-").replace("/", "-")
+            val eventName = "plugin-serialplugin-read-${formattedPath}"
             val listener = { data: ByteArray ->
+                Log.d("Start listening data", "Received ${data.size} bytes: ${data.joinToString(", ") { it.toInt().toString() }} as text: '${String(data)}'")
                 val eventData = JSObject()
-                eventData.put("path", args.path)
                 eventData.put("data", String(data))
-                eventData.put("size", data.size)
 
-                trigger("serialData", eventData)
+                // TODO: Trigger event doesn't send eventData to js-interface
+                // Neither does it buffer the whole USB-signal
+                trigger(eventName, eventData)
             }
 
-            listeners[args.path] = listener
+            listeners[eventName] = listener
             serialPortManager.startListening(args.path, listener)
-            invoke.resolve()
+            
+            val result = JSObject()
+            result.put("success", true)
+            result.put("data", true)
+            result.put("error", null)
+
+            invoke.resolve(result)
         } catch (e: Exception) {
-            invoke.reject("Failed to start listening: ${e.message}")
+            val result = JSObject()
+            result.put("success", false)
+            result.put("data", null)
+            result.put("error", "Failed to start listening: ${e.message}")
+
+            invoke.resolve(result)
         }
     }
 
@@ -229,11 +244,24 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     fun stopListening(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(CloseArgs::class.java)
-            listeners.remove(args.path)
+            val formattedPath = args.path.replace(".", "-").replace("/", "-")
+            val eventName = "plugin-serialplugin-read-${formattedPath}"
+            listeners.remove(eventName)
             serialPortManager.stopListening(args.path)
-            invoke.resolve()
+            
+            val result = JSObject()
+            result.put("success", true)
+            result.put("data", null)
+            result.put("error", null)
+            
+            invoke.resolve(result)
         } catch (e: Exception) {
-            invoke.reject("Failed to stop listening: ${e.message}")
+            val result = JSObject()
+            result.put("success", false)
+            result.put("data", null)
+            result.put("error", "Failed to stop listening: ${e.message}")
+            
+            invoke.resolve(result)
         }
     }
 
