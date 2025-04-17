@@ -41,7 +41,7 @@ class CloseArgs {
 class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     private var webView: WebView? = null
     private lateinit var serialPortManager: SerialPortManager
-    private val listeners = ConcurrentHashMap<String, (ByteArray) -> Unit>()
+    private val activeCallbacks = ConcurrentHashMap<String, (ByteArray) -> Unit>()
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -91,7 +91,6 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
             result.put("ports", managedPorts)
             invoke.resolve(result)
         } catch (e: Exception) {
-            // В случае ошибки возвращаем сообщение об ошибке
             invoke.reject("Failed to get managed ports: ${e.message}")
         }
     }
@@ -100,7 +99,7 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
     fun open(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(PortConfigArgs::class.java)
-            // TODO: Remoce hardcoded values
+            // TODO: Remove hardcoded values
             val serialConfig = SerialPortConfig(
                 path = args.path,
                 baudRate = args.baudRate,
@@ -197,7 +196,8 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
             val data = serialPortManager.readFullyFromPort(args.path, args.timeout, args.size)
 
             val result = JSObject().apply {
-                put("data", data.toList())
+                put("size", data.size)
+                put("data", data.map { it.toInt() })
             }
             invoke.resolve(result)
         } catch (e: Exception) {
@@ -212,16 +212,17 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
             val formattedPath = args.path.replace(".", "-").replace("/", "-")
             val eventName = "plugin-serialplugin-read-${formattedPath}"
             val listener = { data: ByteArray ->
-                Log.d("Start listening data", "Received ${data.size} bytes: ${data.joinToString(", ") { it.toInt().toString() }} as text: '${String(data)}'")
+                Log.d("startListening data", "Received ${data.size} bytes: ${data.joinToString(", ") { it.toInt().toString() }} as text: '${String(data)}'")
                 val eventData = JSObject()
-                eventData.put("data", String(data))
-
+                eventData.put("size", data.size)
+                eventData.put("data", data.map { it.toInt() })
                 // TODO: Trigger event doesn't send eventData to js-interface
                 // Neither does it buffer the whole USB-signal
                 trigger(eventName, eventData)
             }
 
-            listeners[eventName] = listener
+            activeCallbacks[eventName] = listener
+            Log.d("startListening listener", "listener: ${activeCallbacks[eventName]}")
             serialPortManager.startListening(args.path, listener)
             
             val result = JSObject()
@@ -246,7 +247,7 @@ class SerialPlugin(private val activity: Activity) : Plugin(activity) {
             val args = invoke.parseArgs(CloseArgs::class.java)
             val formattedPath = args.path.replace(".", "-").replace("/", "-")
             val eventName = "plugin-serialplugin-read-${formattedPath}"
-            listeners.remove(eventName)
+            activeCallbacks.remove(eventName)
             serialPortManager.stopListening(args.path)
             
             val result = JSObject()
